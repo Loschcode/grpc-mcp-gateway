@@ -49,8 +49,6 @@ func generateFile(plugin *protogen.Plugin, file *protogen.File) {
 	g.P("\t\"fmt\"")
 	g.P()
 	g.P("\t\"github.com/linkbreakers-com/grpc-mcp-gateway/runtime\"")
-	g.P()
-	g.P("\t\"github.com/modelcontextprotocol/go-sdk/mcp\"")
 	g.P(")")
 	g.P()
 
@@ -75,10 +73,10 @@ func generateService(g *protogen.GeneratedFile, service *protogen.Service) {
 	serviceName := service.GoName
 	clientName := serviceName + "Client"
 
-	g.P("// Register", serviceName, "MCPGateway registers MCP tools for ", serviceName, ".")
-	g.P("func Register", serviceName, "MCPGateway(server *mcp.Server, client ", clientName, ") {")
-	g.P("\tif server == nil {")
-	g.P("\t\tpanic(\"mcp server is nil\")")
+	g.P("// Register", serviceName, "MCPHandler registers stateless MCP tools for ", serviceName, ".")
+	g.P("func Register", serviceName, "MCPHandler(mux *runtime.MCPServeMux, client ", clientName, ") {")
+	g.P("\tif mux == nil {")
+	g.P("\t\tpanic(\"mcp mux is nil\")")
 	g.P("\t}")
 	g.P("\tif client == nil {")
 	g.P("\t\tpanic(\"grpc client is nil\")")
@@ -101,12 +99,11 @@ func generateService(g *protogen.GeneratedFile, service *protogen.Service) {
 }
 
 func generateMethod(g *protogen.GeneratedFile, service *protogen.Service, method *protogen.Method, tool annotations.ToolOptions) {
-	serviceName := service.GoName
 	methodName := method.GoName
 
 	toolName := tool.Name
 	if toolName == "" {
-		toolName = serviceName + "." + methodName
+		toolName = service.GoName + "." + methodName
 	}
 	toolTitle := tool.Title
 	if toolTitle == "" {
@@ -117,46 +114,31 @@ func generateMethod(g *protogen.GeneratedFile, service *protogen.Service, method
 		toolDescription = normalizeComment(method.Comments.Leading.String())
 	}
 
-	g.P("\t{")
-	g.P("\t\ttool := &mcp.Tool{")
-	g.P("\t\t\tName: ", fmt.Sprintf("%q", toolName), ",")
-	g.P("\t\t\tTitle: ", fmt.Sprintf("%q", toolTitle), ",")
-	if toolDescription != "" {
-		g.P("\t\t\tDescription: ", fmt.Sprintf("%q", toolDescription), ",")
+	g.P("\tmux.RegisterTool(&runtime.ToolHandler{")
+	g.P("\t\tName: ", fmt.Sprintf("%q", toolName), ",")
+	g.P("\t\tTitle: ", fmt.Sprintf("%q", toolTitle), ",")
+	g.P("\t\tDescription: ", fmt.Sprintf("%q", toolDescription), ",")
+	if tool.ReadOnly {
+		g.P("\t\tReadOnly: true,")
 	}
-	if tool.ReadOnly || tool.Idempotent || tool.Destructive {
-		g.P("\t\t\tAnnotations: &mcp.ToolAnnotations{")
-		if tool.ReadOnly {
-			g.P("\t\t\t\tReadOnlyHint: true,")
-		}
-		if tool.Idempotent {
-			g.P("\t\t\t\tIdempotentHint: true,")
-		}
-		if tool.Destructive {
-			g.P("\t\t\t\tDestructiveHint: func() *bool {")
-			g.P("\t\t\t\t\tv := true")
-			g.P("\t\t\t\t\treturn &v")
-			g.P("\t\t\t\t}(),")
-		}
-		g.P("\t\t\t},")
+	if tool.Idempotent {
+		g.P("\t\tIdempotent: true,")
 	}
-	g.P("\t\t}")
-	g.P("\t\tmcp.AddTool(server, tool, func(ctx context.Context, _ *mcp.CallToolRequest, args map[string]any) (*mcp.CallToolResult, any, error) {")
+	if tool.Destructive {
+		g.P("\t\tDestructive: true,")
+	}
+	g.P("\t\tHandler: func(ctx context.Context, args map[string]any) (any, error) {")
 	g.P("\t\t\treq := &", g.QualifiedGoIdent(method.Input.GoIdent), "{}")
 	g.P("\t\t\tif err := runtime.DecodeArgs(args, req); err != nil {")
-	g.P("\t\t\t\treturn runtime.ToolError(fmt.Sprintf(\"invalid arguments: %v\", err)), nil, nil")
+	g.P("\t\t\t\treturn nil, fmt.Errorf(\"invalid arguments: %v\", err)")
 	g.P("\t\t\t}")
 	g.P("\t\t\tresp, err := client.", methodName, "(ctx, req)")
 	g.P("\t\t\tif err != nil {")
-	g.P("\t\t\t\treturn runtime.ToolError(err.Error()), nil, nil")
+	g.P("\t\t\t\treturn nil, err")
 	g.P("\t\t\t}")
-	g.P("\t\t\toutput, err := runtime.EncodeProto(resp)")
-	g.P("\t\t\tif err != nil {")
-	g.P("\t\t\t\treturn runtime.ToolError(fmt.Sprintf(\"failed to encode response: %v\", err)), nil, nil")
-	g.P("\t\t\t}")
-	g.P("\t\t\treturn nil, output, nil")
-	g.P("\t\t})")
-	g.P("\t}")
+	g.P("\t\t\treturn runtime.EncodeProto(resp)")
+	g.P("\t\t},")
+	g.P("\t})")
 }
 
 func normalizeComment(comment string) string {
