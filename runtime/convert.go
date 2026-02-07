@@ -7,6 +7,18 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// ArgPreprocessor is a function that preprocesses arguments before decoding.
+// This can be used to transform enum values or perform other custom conversions.
+type ArgPreprocessor func(args map[string]any) map[string]any
+
+var globalPreprocessor ArgPreprocessor
+
+// SetArgPreprocessor sets a global argument preprocessor that will be called
+// before decoding arguments in all DecodeArgs calls.
+func SetArgPreprocessor(fn ArgPreprocessor) {
+	globalPreprocessor = fn
+}
+
 // DecodeArgs converts MCP tool arguments into a protobuf request message.
 func DecodeArgs(args map[string]any, msg proto.Message) error {
 	if msg == nil {
@@ -15,6 +27,12 @@ func DecodeArgs(args map[string]any, msg proto.Message) error {
 	if args == nil {
 		args = map[string]any{}
 	}
+
+	// Apply global preprocessor if set
+	if globalPreprocessor != nil {
+		args = globalPreprocessor(args)
+	}
+
 	b, err := json.Marshal(args)
 	if err != nil {
 		return err
