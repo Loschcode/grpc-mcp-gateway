@@ -2,15 +2,14 @@
 
 `grpc-mcp-gateway` is a Go code generator that maps gRPC service methods to MCP tools using protobuf annotations, similar in spirit to `grpc-gateway` but targeting MCP instead of REST.
 
-## What Is MCP?
+## What is MCP?
 
 MCP (Model Context Protocol) is a lightweight protocol that lets AI clients discover tools and call them over a simple JSON-RPC interface. It provides a standard way to expose capabilities (tools) so models can interact with your systems safely and consistently.
 
 ## In Production
 
-This library is used in production at Linkbreakers. We open-sourced it to make it easy for any team with a Protobuf/gRPC API to add MCP support quickly, because we believe MCP will become an increasingly important way to integrate tools into AI workflows.
+This library is used in production at [Linkbreakers](https://linkbreakers.com). We open-sourced it to make it easy for any team with a Protobuf/gRPC API to add MCP support quickly, because we believe MCP will become an increasingly important way to integrate tools into AI workflows.
 
-- Linkbreakers: `https://linkbreakers.com`
 - Linkbreakers MCP server: `https://mcp.linkbreakers.com`
 - MCP directory listing: `https://mcp.so/server/linkbreakers`
 
