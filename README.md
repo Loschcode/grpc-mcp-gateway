@@ -9,6 +9,8 @@ This is a minimal, working v0 that:
 - Generates MCP tool registrations from annotated gRPC methods.
 - Bridges MCP tool calls to gRPC methods.
 - Supports MCP tool metadata (name, title, description, annotations).
+- Provides a lightweight MCP HTTP handler (`runtime.MCPServeMux`) with pluggable request logging.
+- Keeps MCP tooling stateless (no sessions).
 
 ## MCP annotations
 
@@ -93,23 +95,31 @@ buf generate
 For each service with annotated methods, the generator emits:
 
 ```go
-func Register<YourService>MCPGateway(server *mcp.Server, client <YourService>Client)
+func Register<YourService>MCPHandler(mux *runtime.MCPServeMux, client <YourService>Client)
 ```
 
 This registers MCP tools for annotated methods and routes MCP tool calls to the gRPC client.
 
-## Example server wiring
+## Minimal server startup
 
 ```go
-server := mcp.NewServer(&mcp.Implementation{
-  Name:    "greeter-mcp",
-  Version: "v0.1.0",
-}, nil)
+lis, _ := net.Listen("tcp", ":50051")
+grpcServer := grpc.NewServer()
+demov1.RegisterGreeterServer(grpcServer, greeterSvc)
+go grpcServer.Serve(lis)
 
-conn, _ := grpc.Dial("localhost:50051", grpc.WithInsecure())
+conn, _ := grpc.NewClient("localhost:50051", grpc.WithTransportCredentials(insecure.NewCredentials()))
 client := demov1.NewGreeterClient(conn)
 
-RegisterGreeterMCPGateway(server, client)
+handler := runtime.NewMCPServeMux(
+  runtime.ServerMetadata{Name: "greeter-mcp", Version: "v0.1.0"},
+  runtime.WithRequestLogger(func(ctx context.Context, req *runtime.MCPRequest) {
+    // Optional: log MCP requests here
+  }),
+)
+demov1.RegisterGreeterMCPHandler(handler, client)
+
+http.ListenAndServe(":8090", handler)
 ```
 
 ## Example client (end-to-end)
