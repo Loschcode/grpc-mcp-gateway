@@ -57,10 +57,6 @@ func generateFile(plugin *protogen.Plugin, file *protogen.File) {
 	for _, service := range services {
 		generateService(g, service)
 	}
-
-	g.P("func boolPtr(v bool) *bool {")
-	g.P("\treturn &v")
-	g.P("}")
 }
 
 func hasAnnotatedMethods(service *protogen.Service) bool {
@@ -137,7 +133,10 @@ func generateMethod(g *protogen.GeneratedFile, service *protogen.Service, method
 			g.P("\t\t\t\tIdempotentHint: true,")
 		}
 		if tool.Destructive {
-			g.P("\t\t\t\tDestructiveHint: boolPtr(true),")
+			g.P("\t\t\t\tDestructiveHint: func() *bool {")
+			g.P("\t\t\t\t\tv := true")
+			g.P("\t\t\t\t\treturn &v")
+			g.P("\t\t\t\t}(),")
 		}
 		g.P("\t\t\t},")
 	}
