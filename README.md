@@ -53,6 +53,41 @@ protoc \
   path/to/your.proto
 ```
 
+## Buf usage
+
+If you generate protos with Buf, install the plugin and add it to your `buf.gen.yaml`.
+
+Install Buf:
+
+```bash
+brew install buf
+```
+
+Install the plugin (puts `protoc-gen-mcp-gateway` on your PATH):
+
+```bash
+go install github.com/linkbreakers-com/grpc-mcp-gateway/cmd/protoc-gen-mcp-gateway@latest
+```
+
+Example `buf.gen.yaml`:
+
+```yaml
+version: v1
+plugins:
+  - name: go
+    out: generated/go
+  - name: go-grpc
+    out: generated/go
+  - name: mcp-gateway
+    out: generated/go
+```
+
+Then run:
+
+```bash
+buf generate
+```
+
 ## Generated API
 
 For each service with annotated methods, the generator emits:
