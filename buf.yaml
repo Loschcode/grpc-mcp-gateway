@@ -1,4 +1,8 @@
 version: v2
-name: github.com/linkbreakers-com/grpc-mcp-gateway
 deps:
   - buf.build/googleapis/googleapis
+modules:
+  - path: .
+    name: github.com/linkbreakers-com/grpc-mcp-gateway
+    excludes:
+      - examples
