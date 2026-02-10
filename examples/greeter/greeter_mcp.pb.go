@@ -8,40 +8,41 @@ import (
 	"fmt"
 
 	"github.com/linkbreakers-com/grpc-mcp-gateway/runtime"
-
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// RegisterGreeterMCPGateway registers MCP tools for Greeter.
-func RegisterGreeterMCPGateway(server *mcp.Server, client GreeterClient) {
-	if server == nil {
-		panic("mcp server is nil")
+// RegisterGreeterMCPHandler registers stateless MCP tools for Greeter.
+func RegisterGreeterMCPHandler(mux *runtime.MCPServeMux, client GreeterClient) {
+	if mux == nil {
+		panic("mcp mux is nil")
 	}
 	if client == nil {
 		panic("grpc client is nil")
 	}
 
-	{
-		tool := &mcp.Tool{
-			Name:        "greeter.say_hello",
-			Title:       "Say Hello",
-			Description: "Greets a caller by name.",
-			Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
-		}
-		mcp.AddTool(server, tool, func(ctx context.Context, _ *mcp.CallToolRequest, args map[string]any) (*mcp.CallToolResult, any, error) {
+	mux.RegisterTool(&runtime.ToolHandler{
+		Name:        "greeter.say_hello",
+		Title:       "Say Hello",
+		Description: "Greets a caller by name.",
+		InputSchema: map[string]any{
+			"additionalProperties": false,
+			"properties": map[string]any{
+				"name": map[string]any{
+					"type": "string",
+				},
+			},
+			"type": "object",
+		},
+		ReadOnly: true,
+		Handler: func(ctx context.Context, args map[string]any) (any, error) {
 			req := &HelloRequest{}
 			if err := runtime.DecodeArgs(args, req); err != nil {
-				return runtime.ToolError(fmt.Sprintf("invalid arguments: %v", err)), nil, nil
+				return nil, fmt.Errorf("invalid arguments: %v", err)
 			}
 			resp, err := client.SayHello(ctx, req)
 			if err != nil {
-				return runtime.ToolError(err.Error()), nil, nil
+				return nil, err
 			}
-			output, err := runtime.EncodeProto(resp)
-			if err != nil {
-				return runtime.ToolError(fmt.Sprintf("failed to encode response: %v", err)), nil, nil
-			}
-			return nil, output, nil
-		})
-	}
+			return runtime.EncodeProto(resp)
+		},
+	})
 }

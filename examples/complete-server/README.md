@@ -66,7 +66,7 @@ This example demonstrates a **production-ready** MCP server implementation using
 ```bash
 go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
-go install github.com/linkbreakers-com/protoc-gen-go-mcp@latest
+go install github.com/linkbreakers-com/grpc-mcp-gateway/cmd/protoc-gen-mcp-gateway@latest
 ```
 
 ### Generate Code
@@ -75,7 +75,7 @@ go install github.com/linkbreakers-com/protoc-gen-go-mcp@latest
 # Generate gRPC and MCP handler code
 protoc --go_out=. --go_opt=paths=source_relative \
        --go-grpc_out=. --go-grpc_opt=paths=source_relative \
-       --go-mcp_out=. --go-mcp_opt=paths=source_relative \
+       --mcp-gateway_out=. --mcp-gateway_opt=paths=source_relative \
        tasks.proto
 ```
 
@@ -331,7 +331,7 @@ spec:
 
 **Cause**: Server returning errors for `notifications/initialized`
 
-**Solution**: Ensure you're using `grpc-mcp-gateway` v0.4.1+ which properly handles notifications
+**Solution**: Ensure you're using `grpc-mcp-gateway` v0.5.0+ which properly handles notifications
 
 ### Issue 2: CORS Errors in Browser
 

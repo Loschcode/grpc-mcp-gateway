@@ -3,8 +3,9 @@ package main
 import (
 	"context"
 	"log"
+	"net/http"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/linkbreakers-com/grpc-mcp-gateway/runtime"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -16,10 +17,14 @@ func (e *echoClient) Echo(ctx context.Context, in *structpb.Struct, _ ...grpc.Ca
 }
 
 func main() {
-	server := mcp.NewServer(&mcp.Implementation{Name: "structecho", Version: "v0.1.0"}, nil)
-	RegisterEchoServiceMCPGateway(server, &echoClient{})
+	mcpMux := runtime.NewMCPServeMux(runtime.ServerMetadata{
+		Name:    "structecho",
+		Version: "v0.1.0",
+	})
+	RegisterEchoServiceMCPHandler(mcpMux, &echoClient{})
 
-	if err := server.Run(context.Background(), &mcp.StdioTransport{}); err != nil {
+	log.Println("structecho MCP server listening on :8090")
+	if err := http.ListenAndServe(":8090", mcpMux); err != nil {
 		log.Fatal(err)
 	}
 }

@@ -1,15 +1,19 @@
 package greeter
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/linkbreakers-com/grpc-mcp-gateway/runtime"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
 )
 
@@ -37,79 +41,51 @@ func TestGreeterMCPFlow(t *testing.T) {
 	dialer := func(context.Context, string) (net.Conn, error) {
 		return lis.Dial()
 	}
-	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(dialer), grpc.WithInsecure())
+	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(dialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		t.Fatalf("grpc dial failed: %v", err)
 	}
 	defer conn.Close()
 
-	// Build gRPC client.
 	grpcClient := NewGreeterClient(conn)
 
-	// Start MCP server and register gateway tools.
-	mcpServer := mcp.NewServer(&mcp.Implementation{Name: "greeter-mcp", Version: "v0.1.0"}, nil)
-	RegisterGreeterMCPGateway(mcpServer, grpcClient)
+	// Create MCP mux and register handler.
+	mcpMux := runtime.NewMCPServeMux(runtime.ServerMetadata{
+		Name:    "greeter-mcp",
+		Version: "v0.1.0",
+	})
+	RegisterGreeterMCPHandler(mcpMux, grpcClient)
 
-	// Connect MCP client/server in-memory.
-	clientTransport, serverTransport := mcp.NewInMemoryTransports()
-	_, err = mcpServer.Connect(ctx, serverTransport, nil)
-	if err != nil {
-		t.Fatalf("mcp server connect failed: %v", err)
-	}
-	mcpClient := mcp.NewClient(&mcp.Implementation{Name: "greeter-client", Version: "v0.1.0"}, nil)
-	session, err := mcpClient.Connect(ctx, clientTransport, nil)
-	if err != nil {
-		t.Fatalf("mcp client connect failed: %v", err)
-	}
-	defer session.Close()
-
-	res, err := session.CallTool(ctx, &mcp.CallToolParams{
-		Name: "greeter.say_hello",
-		Arguments: map[string]any{
-			"name": "Ada",
+	// Call tool via HTTP.
+	body, _ := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name":      "greeter.say_hello",
+			"arguments": map[string]any{"name": "Ada"},
 		},
 	})
-	if err != nil {
-		t.Fatalf("call tool failed: %v", err)
-	}
-	if res.IsError {
-		t.Fatalf("tool returned error: %+v", res.Content)
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mcpMux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected status: %d, body: %s", rec.Code, rec.Body.String())
 	}
 
-	message := readStructuredMessage(t, res.StructuredContent)
+	var resp struct {
+		Result struct {
+			StructuredContent map[string]any `json:"structuredContent"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+
+	message, _ := resp.Result.StructuredContent["message"].(string)
 	if message != "Hello, Ada" {
 		t.Fatalf("unexpected message: %q", message)
 	}
-}
-
-func readStructuredMessage(t *testing.T, structured any) string {
-	t.Helper()
-	if structured == nil {
-		t.Fatalf("missing structured content")
-	}
-
-	var payload map[string]any
-	switch v := structured.(type) {
-	case map[string]any:
-		payload = v
-	case json.RawMessage:
-		if err := json.Unmarshal(v, &payload); err != nil {
-			t.Fatalf("failed to unmarshal structured content: %v", err)
-		}
-	case []byte:
-		if err := json.Unmarshal(v, &payload); err != nil {
-			t.Fatalf("failed to unmarshal structured content: %v", err)
-		}
-	default:
-		data, err := json.Marshal(v)
-		if err != nil {
-			t.Fatalf("unexpected structured content type %T", v)
-		}
-		if err := json.Unmarshal(data, &payload); err != nil {
-			t.Fatalf("failed to unmarshal structured content: %v", err)
-		}
-	}
-
-	msg, _ := payload["message"].(string)
-	return msg
 }

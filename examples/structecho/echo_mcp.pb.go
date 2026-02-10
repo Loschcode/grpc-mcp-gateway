@@ -8,41 +8,37 @@ import (
 	"fmt"
 
 	"github.com/linkbreakers-com/grpc-mcp-gateway/runtime"
-
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
-// RegisterEchoServiceMCPGateway registers MCP tools for EchoService.
-func RegisterEchoServiceMCPGateway(server *mcp.Server, client EchoServiceClient) {
-	if server == nil {
-		panic("mcp server is nil")
+// RegisterEchoServiceMCPHandler registers stateless MCP tools for EchoService.
+func RegisterEchoServiceMCPHandler(mux *runtime.MCPServeMux, client EchoServiceClient) {
+	if mux == nil {
+		panic("mcp mux is nil")
 	}
 	if client == nil {
 		panic("grpc client is nil")
 	}
 
-	{
-		tool := &mcp.Tool{
-			Name:        "echo",
-			Title:       "Echo",
-			Description: "Echoes structured input back to the caller.",
-			Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
-		}
-		mcp.AddTool(server, tool, func(ctx context.Context, _ *mcp.CallToolRequest, args map[string]any) (*mcp.CallToolResult, any, error) {
+	mux.RegisterTool(&runtime.ToolHandler{
+		Name:        "echo",
+		Title:       "Echo",
+		Description: "Echoes structured input back to the caller.",
+		InputSchema: map[string]any{
+			"additionalProperties": true,
+			"type":                 "object",
+		},
+		ReadOnly: true,
+		Handler: func(ctx context.Context, args map[string]any) (any, error) {
 			req := &structpb.Struct{}
 			if err := runtime.DecodeArgs(args, req); err != nil {
-				return runtime.ToolError(fmt.Sprintf("invalid arguments: %v", err)), nil, nil
+				return nil, fmt.Errorf("invalid arguments: %v", err)
 			}
 			resp, err := client.Echo(ctx, req)
 			if err != nil {
-				return runtime.ToolError(err.Error()), nil, nil
+				return nil, err
 			}
-			output, err := runtime.EncodeProto(resp)
-			if err != nil {
-				return runtime.ToolError(fmt.Sprintf("failed to encode response: %v", err)), nil, nil
-			}
-			return nil, output, nil
-		})
-	}
+			return runtime.EncodeProto(resp)
+		},
+	})
 }

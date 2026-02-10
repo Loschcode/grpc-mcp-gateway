@@ -1,44 +1,41 @@
 package main
 
 import (
-	"context"
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log"
-	"os/exec"
-	"time"
-
-	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"net/http"
 )
 
 func main() {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	client := mcp.NewClient(&mcp.Implementation{Name: "structecho-client", Version: "v0.1.0"}, nil)
-	transport := &mcp.CommandTransport{
-		Command: exec.Command("go", "run", "./examples/structecho"),
-	}
-
-	session, err := client.Connect(ctx, transport, nil)
-	if err != nil {
-		log.Fatalf("connect failed: %v", err)
-	}
-	defer session.Close()
-
-	res, err := session.CallTool(ctx, &mcp.CallToolParams{
-		Name: "echo",
-		Arguments: map[string]any{
-			"message": "hello from client",
-			"count":   2,
+	body, _ := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name": "echo",
+			"arguments": map[string]any{
+				"message": "hello from client",
+				"count":   2,
+			},
 		},
 	})
+
+	resp, err := http.Post("http://localhost:8090/", "application/json", bytes.NewReader(body))
 	if err != nil {
-		log.Fatalf("call tool failed: %v", err)
+		log.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	data, _ := io.ReadAll(resp.Body)
+
+	var result map[string]any
+	if err := json.Unmarshal(data, &result); err != nil {
+		log.Fatalf("parse failed: %v", err)
 	}
 
-	fmt.Printf("tool result error=%v\n", res.IsError)
-	fmt.Printf("content=%v\n", res.Content)
-	if res.StructuredContent != nil {
-		fmt.Printf("structured=%v\n", res.StructuredContent)
-	}
+	pretty, _ := json.MarshalIndent(result, "", "  ")
+	fmt.Println(string(pretty))
 }

@@ -170,18 +170,14 @@ Perfect for teams building production MCP servers.
 
 ## Example client (end-to-end)
 
-This repo includes a tiny MCP client that spawns the example server and calls the `echo` tool:
+This repo includes a tiny MCP client that calls the `echo` tool over HTTP:
 
 ```bash
+# In one terminal, start the echo server:
+go run ./examples/structecho
+
+# In another terminal, call the tool:
 go run ./examples/structecho-client
-```
-
-Expected output:
-
-```
-tool result error=false
-content=[...]
-structured=map[...]
 ```
 
 ## Example with real protobuf + gRPC
