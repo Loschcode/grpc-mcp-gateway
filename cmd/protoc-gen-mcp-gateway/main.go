@@ -114,11 +114,13 @@ func generateMethod(g *protogen.GeneratedFile, service *protogen.Service, method
 		toolDescription = normalizeComment(method.Comments.Leading.String())
 	}
 
+	schema := buildMessageSchema(method.Input, make(map[string]bool))
+
 	g.P("\tmux.RegisterTool(&runtime.ToolHandler{")
 	g.P("\t\tName: ", fmt.Sprintf("%q", toolName), ",")
 	g.P("\t\tTitle: ", fmt.Sprintf("%q", toolTitle), ",")
 	g.P("\t\tDescription: ", fmt.Sprintf("%q", toolDescription), ",")
-	g.P("\t\tInputSchema: runtime.DefaultInputSchema(),")
+	emitSchemaField(g, "InputSchema", schema, "\t\t")
 	if tool.ReadOnly {
 		g.P("\t\tReadOnly: true,")
 	}
@@ -143,9 +145,14 @@ func generateMethod(g *protogen.GeneratedFile, service *protogen.Service, method
 }
 
 func normalizeComment(comment string) string {
-	comment = strings.TrimSpace(comment)
-	comment = strings.ReplaceAll(comment, "\n", " ")
-	comment = strings.ReplaceAll(comment, "\r", " ")
-	comment = strings.Join(strings.Fields(comment), " ")
-	return comment
+	var lines []string
+	for _, line := range strings.Split(comment, "\n") {
+		line = strings.TrimSpace(line)
+		line = strings.TrimPrefix(line, "//")
+		line = strings.TrimSpace(line)
+		if line != "" {
+			lines = append(lines, line)
+		}
+	}
+	return strings.Join(lines, " ")
 }

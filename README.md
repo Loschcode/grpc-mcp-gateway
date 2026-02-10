@@ -8,11 +8,10 @@ MCP (Model Context Protocol) is a lightweight protocol that lets AI clients disc
 
 ## Status
 
-This is a minimal, working version that:
-
 - Generates MCP tool registrations from annotated gRPC methods.
 - Bridges MCP tool calls to gRPC methods.
 - Supports MCP tool metadata (name, title, description, annotations).
+- Generates strongly-typed JSON Schema for tool inputs derived from protobuf message definitions.
 - Provides a lightweight MCP HTTP handler (`runtime.MCPServeMux`) with pluggable request logging.
 - Keeps MCP tooling stateless (no sessions).
 
@@ -204,13 +203,52 @@ This library is used in production at Linkbreakers. We open-sourced it to make i
 Linkbreakers MCP server: https://mcp.linkbreakers.com  
 MCP directory listing: https://mcp.so/server/linkbreakers
 
-## Limitations (v0)
+## Schema generation
+
+The generator produces strongly-typed JSON Schema for each tool's `inputSchema`, derived directly from the protobuf message definition. This is inspired by how `grpc-gateway`'s `protoc-gen-openapiv2` generates OpenAPI schemas.
+
+What is generated:
+
+- **Field types**: proto scalar kinds are mapped to JSON Schema types (`string`, `integer`, `number`, `boolean`) with appropriate `format` values (`int32`, `int64`, `float`, `double`, `byte`, `date-time`).
+- **Enum fields**: All enum values are listed in an `enum` array. The zero-value sentinel (e.g. `TYPE_UNSPECIFIED`) is excluded so MCP clients always pick a valid value.
+- **Nested messages**: Recursively expanded into object schemas with `properties`.
+- **Repeated fields**: Mapped to `{"type": "array", "items": ...}`.
+- **Map fields**: Mapped to `{"type": "object", "additionalProperties": ...}`.
+- **Well-known types**: `google.protobuf.Timestamp` → `date-time` string, `Struct` → open object, wrapper types → their underlying types, etc.
+- **`google.api.field_behavior`**: `OUTPUT_ONLY` fields are excluded from input schemas. `REQUIRED` fields are added to the `required` array.
+- **Descriptions**: Extracted from proto comments and included in the schema.
+
+Example generated schema for a `CreateMediaRequest`:
+
+```go
+InputSchema: map[string]any{
+    "additionalProperties": false,
+    "properties": map[string]any{
+        "fileName": map[string]any{
+            "description": "The name of the file",
+            "type":        "string",
+        },
+        "mediaType": map[string]any{
+            "description": "The type of media",
+            "enum":        []string{"TYPE_CENTRAL_QRCODE_IMAGE"},
+            "type":        "string",
+        },
+        "visibility": map[string]any{
+            "description": "The visibility of the media.",
+            "enum":        []string{"VISIBILITY_PUBLIC", "VISIBILITY_PRIVATE"},
+            "type":        "string",
+        },
+    },
+    "type": "object",
+},
+```
+
+## Limitations
 
 - Only unary RPCs are supported (streaming RPCs are skipped).
-- Tool input/output schemas are permissive object schemas (not fully derived from protobuf yet).
 
 ## Project layout
 
-- `cmd/protoc-gen-mcp-gateway`: the protoc plugin
+- `cmd/protoc-gen-mcp-gateway`: the protoc plugin (code generator + schema builder)
 - `proto/mcp/gateway/v1/annotations.proto`: MCP annotation definitions
 - `runtime`: MCP <-> protobuf conversion helpers
