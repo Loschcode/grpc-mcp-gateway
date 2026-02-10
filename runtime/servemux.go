@@ -95,12 +95,24 @@ func (mux *MCPServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch req.Method {
 	case "initialize":
 		mux.handleInitialize(w, ctx, req.ID)
+	case "notifications/initialized":
+		// Client notification that initialization is complete.
+		// Per JSON-RPC 2.0 spec, notifications (ID == nil) don't expect a response.
+		// Just acknowledge it silently by sending empty 204 response.
+		w.WriteHeader(http.StatusNoContent)
 	case "tools/list":
 		mux.handleListTools(w, ctx, req.ID)
 	case "tools/call":
 		mux.handleCallTool(w, ctx, req.ID, req.Params)
 	default:
-		sendError(w, req.ID, -32601, fmt.Sprintf("Method not found: %s", req.Method))
+		// Per JSON-RPC 2.0 spec, notifications (requests with ID == nil) don't get error responses.
+		// Only respond with error if this was an actual request (has an ID).
+		if req.ID != nil {
+			sendError(w, req.ID, -32601, fmt.Sprintf("Method not found: %s", req.Method))
+		} else {
+			// Unknown notification - silently ignore
+			w.WriteHeader(http.StatusNoContent)
+		}
 	}
 }
 
