@@ -220,6 +220,11 @@ Example generated schema for a `CreateMediaRequest`:
 InputSchema: map[string]any{
     "additionalProperties": false,
     "properties": map[string]any{
+        "fileData": map[string]any{
+            "description": "The file data to upload.",
+            "format":      "byte",
+            "type":        "string",
+        },
         "fileName": map[string]any{
             "description": "The name of the file",
             "type":        "string",
