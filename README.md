@@ -16,6 +16,12 @@ MCP (Model Context Protocol) is a lightweight protocol that lets AI clients disc
 - Keeps MCP tooling stateless (no sessions).
 - Implements MCP protocol version 2025-11-25 (JSON-RPC 2.0). See https://modelcontextprotocol.io/specification/2025-11-25/ for details.
 
+## MCP spec compatibility
+
+| grpc-mcp-gateway version | MCP spec version |
+| --- | --- |
+| v0.6.0+ | 2025-11-25 |
+
 ## MCP annotations
 
 Define MCP annotations in your proto file alongside any REST annotations:
@@ -124,6 +130,46 @@ handler := runtime.NewMCPServeMux(
 demov1.RegisterGreeterMCPHandler(handler, client)
 
 http.ListenAndServe(":8090", handler)
+```
+
+## Logging example
+
+Use `WithRequestLogger` to log every MCP request with method-specific detail:
+
+```go
+logger := runtime.WithRequestLogger(func(ctx context.Context, req *runtime.MCPRequest) {
+	switch req.Method {
+	case "tools/call":
+		name, _ := req.Params["name"].(string)
+		if name == "" {
+			log.Printf("MCP tools/call")
+			return
+		}
+		log.Printf("MCP tools/call: %s", name)
+	case "tools/list":
+		log.Printf("MCP tools/list - client discovering tools")
+	case "initialize":
+		log.Printf("MCP initialize - client connecting")
+	case "notifications/initialized":
+		log.Printf("MCP notifications/initialized - handshake complete")
+	default:
+		log.Printf("MCP %s", req.Method)
+	}
+})
+
+mux := runtime.NewMCPServeMux(
+	runtime.ServerMetadata{Name: "greeter-mcp", Version: "v0.1.0"},
+	logger,
+)
+```
+
+Example log output:
+
+```text
+2026/02/11 09:41:02 MCP initialize - client connecting
+2026/02/11 09:41:02 MCP notifications/initialized - handshake complete
+2026/02/11 09:41:03 MCP tools/list - client discovering tools
+2026/02/11 09:41:04 MCP tools/call: greeter.say_hello
 ```
 
 ## Minimal client request (curl)
