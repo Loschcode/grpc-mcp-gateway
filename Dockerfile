@@ -1,4 +1,4 @@
-FROM golang:1.23-alpine AS builder
+FROM golang:1.26.5-alpine AS builder
 WORKDIR /workspace
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build \

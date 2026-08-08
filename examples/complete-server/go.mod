@@ -1,6 +1,6 @@
 module github.com/linkbreakers-com/grpc-mcp-gateway/examples/complete-server
 
-go 1.21
+go 1.26.5
 
 require (
 	github.com/linkbreakers-com/grpc-mcp-gateway v0.4.1
