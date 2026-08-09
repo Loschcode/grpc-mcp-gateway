@@ -1,6 +1,6 @@
 module github.com/linkbreakers-com/grpc-mcp-gateway
 
-go 1.23.0
+go 1.26.5
 
 require (
 	github.com/modelcontextprotocol/go-sdk v1.3.0-pre.1
