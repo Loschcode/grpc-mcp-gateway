@@ -13,6 +13,7 @@ import (
 type MCPServeMux struct {
 	mu            sync.RWMutex
 	tools         map[string]*ToolHandler
+	resources     map[string]*Resource
 	metadata      ServerMetadata
 	requestLogger RequestLogger
 }
@@ -26,6 +27,7 @@ type ToolHandler struct {
 	ReadOnly    bool
 	Idempotent  bool
 	Destructive bool
+	UI          *ToolUI
 	Handler     func(ctx context.Context, args map[string]any) (any, error)
 }
 
@@ -54,6 +56,7 @@ func WithRequestLogger(logger RequestLogger) Option {
 func NewMCPServeMux(metadata ServerMetadata, opts ...Option) *MCPServeMux {
 	mux := &MCPServeMux{
 		tools:         make(map[string]*ToolHandler),
+		resources:     make(map[string]*Resource),
 		metadata:      metadata,
 		requestLogger: func(context.Context, *MCPRequest) {},
 	}
@@ -117,6 +120,24 @@ func (mux *MCPServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		mux.handleCallTool(w, ctx, req.ID, req.Params)
+	case "resources/list":
+		if req.ID == nil {
+			sendError(w, nil, -32600, "Missing request id")
+			return
+		}
+		mux.handleListResources(w, ctx, req.ID)
+	case "resources/templates/list":
+		if req.ID == nil {
+			sendError(w, nil, -32600, "Missing request id")
+			return
+		}
+		sendSuccess(w, req.ID, map[string]any{"resourceTemplates": []any{}})
+	case "resources/read":
+		if req.ID == nil {
+			sendError(w, nil, -32600, "Missing request id")
+			return
+		}
+		mux.handleReadResource(w, ctx, req.ID, req.Params)
 	default:
 		// Per JSON-RPC 2.0 spec, notifications (requests with ID == nil) don't get error responses.
 		// Only respond with error if this was an actual request (has an ID).
@@ -152,17 +173,33 @@ type MCPError struct {
 }
 
 func (mux *MCPServeMux) handleInitialize(w http.ResponseWriter, ctx context.Context, id interface{}) {
+	capabilities := map[string]interface{}{
+		"tools": map[string]interface{}{
+			"listChanged": false,
+		},
+	}
+	mux.mu.RLock()
+	if len(mux.resources) > 0 {
+		capabilities["resources"] = map[string]interface{}{
+			"listChanged": false,
+		}
+	}
+	if mux.hasAppResources() {
+		capabilities["extensions"] = map[string]interface{}{
+			AppsExtensionID: map[string]interface{}{
+				"mimeTypes": []string{AppResourceMIMEType},
+			},
+		}
+	}
+	mux.mu.RUnlock()
+
 	result := map[string]interface{}{
 		"protocolVersion": "2025-11-25",
 		"serverInfo": map[string]interface{}{
 			"name":    mux.metadata.Name,
 			"version": mux.metadata.Version,
 		},
-		"capabilities": map[string]interface{}{
-			"tools": map[string]interface{}{
-				"listChanged": false,
-			},
-		},
+		"capabilities": capabilities,
 	}
 
 	sendSuccess(w, id, result)
@@ -199,6 +236,9 @@ func (mux *MCPServeMux) handleListTools(w http.ResponseWriter, ctx context.Conte
 		}
 		if len(annotations) > 0 {
 			t["annotations"] = annotations
+		}
+		if meta := toolMeta(tool.UI); meta != nil {
+			t["_meta"] = meta
 		}
 
 		tools = append(tools, t)

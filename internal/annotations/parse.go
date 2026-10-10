@@ -18,6 +18,17 @@ type ToolOptions struct {
 	ReadOnly    bool
 	Idempotent  bool
 	Destructive bool
+	UI          *ToolUIOptions
+}
+
+type ToolUIOptions struct {
+	ResourceURI string
+	Visibility  []string
+}
+
+var toolVisibilityNames = map[uint64]string{
+	1: "model",
+	2: "app",
 }
 
 type ServiceOptions struct {
@@ -232,6 +243,69 @@ func parseToolOptions(raw []byte) ToolOptions {
 				return out
 			}
 			out.Destructive = v != 0
+			raw = raw[m:]
+		case 7:
+			if typ != protowire.BytesType {
+				return out
+			}
+			b, m := protowire.ConsumeBytes(raw)
+			if m < 0 {
+				return out
+			}
+			out.UI = parseToolUIOptions(b)
+			raw = raw[m:]
+		default:
+			skip, err := consumeField(typ, raw)
+			if err != nil {
+				return out
+			}
+			raw = raw[skip:]
+		}
+	}
+	return out
+}
+
+func parseToolUIOptions(raw []byte) *ToolUIOptions {
+	out := &ToolUIOptions{}
+	addVisibility := func(v uint64) {
+		if name, ok := toolVisibilityNames[v]; ok {
+			out.Visibility = append(out.Visibility, name)
+		}
+	}
+	for len(raw) > 0 {
+		num, typ, n := protowire.ConsumeTag(raw)
+		if n < 0 {
+			return out
+		}
+		raw = raw[n:]
+		switch {
+		case num == 1 && typ == protowire.BytesType:
+			b, m := protowire.ConsumeBytes(raw)
+			if m < 0 {
+				return out
+			}
+			out.ResourceURI = string(b)
+			raw = raw[m:]
+		case num == 2 && typ == protowire.VarintType:
+			v, m := protowire.ConsumeVarint(raw)
+			if m < 0 {
+				return out
+			}
+			addVisibility(v)
+			raw = raw[m:]
+		case num == 2 && typ == protowire.BytesType:
+			packed, m := protowire.ConsumeBytes(raw)
+			if m < 0 {
+				return out
+			}
+			for len(packed) > 0 {
+				v, k := protowire.ConsumeVarint(packed)
+				if k < 0 {
+					return out
+				}
+				addVisibility(v)
+				packed = packed[k:]
+			}
 			raw = raw[m:]
 		default:
 			skip, err := consumeField(typ, raw)

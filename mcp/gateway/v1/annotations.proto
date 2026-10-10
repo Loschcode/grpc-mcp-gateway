@@ -13,6 +13,21 @@ message Tool {
   bool read_only = 4;
   bool idempotent = 5;
   bool destructive = 6;
+  ToolUI ui = 7;
+}
+
+// MCP Apps (SEP-1865) linkage: the host renders the tool result with the
+// ui:// resource the server registers under resource_uri.
+message ToolUI {
+  string resource_uri = 1;
+  // Empty means visible to both the model and the app.
+  repeated ToolVisibility visibility = 2;
+}
+
+enum ToolVisibility {
+  TOOL_VISIBILITY_UNSPECIFIED = 0;
+  TOOL_VISIBILITY_MODEL = 1;
+  TOOL_VISIBILITY_APP = 2;
 }
 
 message MethodOptions {
