@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"bytes"
 	"encoding/json"
 
 	"google.golang.org/protobuf/encoding/protojson"
@@ -17,6 +18,24 @@ var globalPreprocessor ArgPreprocessor
 // before decoding arguments in all DecodeArgs calls.
 func SetArgPreprocessor(fn ArgPreprocessor) {
 	globalPreprocessor = fn
+}
+
+// ProtoMarshaler encodes a tool's protobuf response as JSON.
+type ProtoMarshaler func(msg proto.Message) ([]byte, error)
+
+var protoMarshaler ProtoMarshaler = protojson.MarshalOptions{
+	UseProtoNames:   false,
+	EmitUnpopulated: false,
+}.Marshal
+
+// SetProtoMarshaler replaces the protojson encoding EncodeProto uses for every
+// tool response, so a server can keep its MCP output identical to its other
+// transports (for instance, 64-bit integers as JSON numbers).
+func SetProtoMarshaler(fn ProtoMarshaler) {
+	if fn == nil {
+		panic("proto marshaler is nil")
+	}
+	protoMarshaler = fn
 }
 
 // DecodeArgs converts MCP tool arguments into a protobuf request message.
@@ -48,16 +67,14 @@ func EncodeProto(msg proto.Message) (map[string]any, error) {
 	if msg == nil {
 		return map[string]any{}, nil
 	}
-	marshal := protojson.MarshalOptions{
-		UseProtoNames:   false,
-		EmitUnpopulated: false,
-	}
-	b, err := marshal.Marshal(msg)
+	b, err := protoMarshaler(msg)
 	if err != nil {
 		return nil, err
 	}
+	dec := json.NewDecoder(bytes.NewReader(b))
+	dec.UseNumber()
 	var out map[string]any
-	if err := json.Unmarshal(b, &out); err != nil {
+	if err := dec.Decode(&out); err != nil {
 		return nil, err
 	}
 	if out == nil {
