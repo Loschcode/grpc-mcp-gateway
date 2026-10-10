@@ -18,6 +18,9 @@ func main() {
 			if !file.Generate {
 				continue
 			}
+			if err := validateFile(file); err != nil {
+				return err
+			}
 			generateFile(plugin, file)
 		}
 		return nil
@@ -55,6 +58,21 @@ func generateFile(plugin *protogen.Plugin, file *protogen.File) {
 	for _, service := range services {
 		generateService(g, service)
 	}
+}
+
+func validateFile(file *protogen.File) error {
+	for _, service := range file.Services {
+		for _, method := range service.Methods {
+			tool, ok := annotations.ToolFromMethod(method.Desc)
+			if !ok || tool.UI == nil {
+				continue
+			}
+			if !strings.HasPrefix(tool.UI.ResourceURI, "ui://") {
+				return fmt.Errorf("%s: mcp tool ui.resource_uri must use the ui:// scheme, got %q", method.Desc.FullName(), tool.UI.ResourceURI)
+			}
+		}
+	}
+	return nil
 }
 
 func hasAnnotatedMethods(service *protogen.Service) bool {
@@ -129,6 +147,18 @@ func generateMethod(g *protogen.GeneratedFile, service *protogen.Service, method
 	}
 	if tool.Destructive {
 		g.P("\t\tDestructive: true,")
+	}
+	if tool.UI != nil && tool.UI.ResourceURI != "" {
+		g.P("\t\tUI: &runtime.ToolUI{")
+		g.P("\t\t\tResourceURI: ", fmt.Sprintf("%q", tool.UI.ResourceURI), ",")
+		if len(tool.UI.Visibility) > 0 {
+			quoted := make([]string, len(tool.UI.Visibility))
+			for i, v := range tool.UI.Visibility {
+				quoted[i] = fmt.Sprintf("%q", v)
+			}
+			g.P("\t\t\tVisibility: []string{", strings.Join(quoted, ", "), "},")
+		}
+		g.P("\t\t},")
 	}
 	g.P("\t\tHandler: func(ctx context.Context, args map[string]any) (any, error) {")
 	g.P("\t\t\treq := &", g.QualifiedGoIdent(method.Input.GoIdent), "{}")

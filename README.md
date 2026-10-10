@@ -20,6 +20,7 @@ MCP (Model Context Protocol) is a lightweight protocol that lets AI clients disc
 | grpc-mcp-gateway version | MCP spec version |
 | --- | --- |
 | v0.6.0+ | [2025-11-25 (JSON-RPC 2.0)](https://modelcontextprotocol.io/specification/2025-11-25/) |
+| v0.7.0+ | adds [MCP Apps](https://github.com/modelcontextprotocol/ext-apps) (`io.modelcontextprotocol/ui`, spec 2026-01-26) |
 
 ## MCP annotations
 
@@ -52,6 +53,46 @@ service Greeter {
 ```
 
 Annotation schema lives at `proto/mcp/gateway/v1/annotations.proto`.
+
+## MCP Apps (interactive UI)
+
+A tool can name the `ui://` view that renders its result ([MCP Apps, SEP-1865](https://github.com/modelcontextprotocol/ext-apps/blob/main/specification/2026-01-26/apps.mdx)):
+
+```proto
+option (mcp.gateway.v1.mcp) = {
+  tool: {
+    name: "links_get"
+    read_only: true
+    ui: { resource_uri: "ui://example/link-card.html" }
+  }
+};
+```
+
+The generator rejects a `resource_uri` without the `ui://` scheme. `visibility` takes
+`TOOL_VISIBILITY_MODEL` and/or `TOOL_VISIBILITY_APP`; leave it empty for both.
+
+`tools/list` then carries `_meta.ui.resourceUri`, plus the deprecated flat
+`_meta["ui/resourceUri"]` and ChatGPT's `_meta["openai/outputTemplate"]` alias.
+The view itself is registered by the server:
+
+```go
+border := true
+mux.RegisterResource(&runtime.Resource{
+    URI:           "ui://example/link-card.html",
+    Name:          "link_card",
+    MIMEType:      runtime.AppResourceMIMEType, // text/html;profile=mcp-app
+    Text:          linkCardHTML,
+    PrefersBorder: &border,
+})
+if missing := mux.MissingUIResources(); len(missing) > 0 {
+    panic(fmt.Sprintf("tools reference unregistered views: %v", missing))
+}
+```
+
+Registering an app resource adds `resources/list`, `resources/read` and
+`resources/templates/list`, and `initialize` advertises the `resources` capability
+and the `io.modelcontextprotocol/ui` extension. Declare `CSP` only when the view
+loads external origins; without it hosts apply their strict default.
 
 ## Generator usage
 
